@@ -18,10 +18,6 @@ braid_maze_game/
 │   │   ├── mod.rs
 │   │   ├── interface.rs
 │   │   └── client.rs
-│   ├── comm/
-│   │   ├── mod.rs
-│   │   ├── state_channel.rs
-│   │   └── socket.rs
 │   ├── log/
 │   │   ├── mod.rs
 │   │   ├── dungeon_log.rs
