@@ -4,6 +4,8 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use serde::{Serialize, Deserialize};
 use crate::dungeon::maze::{Maze, Cell};
+use crate::blockchain::state_channel::{StateChannel, State};
+use secp256k1::{Secp256k1, SecretKey, Signature, PublicKey};
 
 /**
  * - Server Structure: Represents the server state with a shared maze and player data.
@@ -22,12 +24,14 @@ use crate::dungeon::maze::{Maze, Cell};
 struct PlayerData {
     id: usize,
     exploration_mask: Vec<Vec<bool>>,
+    commitment: Vec<u8>, // Commitment of the current position.
 }
 
 // Structure to represent the server state.
 struct Server {
     maze: Arc<Mutex<Maze>>, // Shared maze between threads.
     players: Arc<Mutex<Vec<PlayerData>>>, // Shared player data between threads.
+    state_channels: Arc<Mutex<HashMap<usize, StateChannel>>>, // State channels for each player.
     max_turns: usize, // Maximum number of turns allowed.
     current_turn: usize, // Current turn number.
     initial_treasure: f64, // Initial treasure amount.
@@ -42,6 +46,7 @@ impl Server {
         Server {
             maze: Arc::new(Mutex::new(maze)),
             players: Arc::new(Mutex::new(Vec::new())),
+            state_channels: Arc::new(Mutex::new(HashMap::new())),
             max_turns,
             current_turn: 0,
             initial_treasure,
@@ -50,14 +55,16 @@ impl Server {
     }
 
     // Add a new player to the server.
-    fn add_player(&self, player_id: usize) {
+    fn add_player(&self, player_id: usize, player_address: &str, server_address: &str) {
         let maze = self.maze.lock().unwrap();
         let exploration_mask = vec![vec![false; maze.height]; maze.width];
         let player_data = PlayerData {
             id: player_id,
             exploration_mask,
+            commitment: vec![],
         };
         self.players.lock().unwrap().push(player_data);
+        self.state_channels.lock().unwrap().insert(player_id, StateChannel::new(player_address, server_address));
     }
 
     // Handle incoming player connections.
@@ -87,6 +94,7 @@ impl Server {
         let mut players = self.players.lock().unwrap();
         if let Some(player) = players.iter_mut().find(|p| p.id == player_data.id) {
             player.exploration_mask = player_data.exploration_mask.clone();
+            player.commitment = player_data.commitment.clone();
         }
     }
 
@@ -131,6 +139,7 @@ impl Clone for Server {
         Server {
             maze: Arc::clone(&self.maze),
             players: Arc::clone(&self.players),
+            state_channels: Arc::clone(&self.state_channels),
             max_turns: self.max_turns,
             current_turn: self.current_turn,
             initial_treasure: self.initial_treasure,
